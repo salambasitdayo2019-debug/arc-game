@@ -4,133 +4,45 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Jungle Catch | Arc Testnet</title>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, push, onValue, query, orderByChild, limitToLast }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-  const firebaseConfig = {
-    apiKey: "AIzaSyDemo_Replace_Me",
-    authDomain: "jungle-catch-arc.firebaseapp.com",
-    databaseURL: "https://jungle-catch-arc-default-rtdb.firebaseio.com",
-    projectId: "jungle-catch-arc",
-    storageBucket: "jungle-catch-arc.appspot.com",
-    messagingSenderId: "000000000000",
-    appId: "1:000000000000:web:0000"
-  };
-  let db;
-  try {
-    const app = initializeApp(firebaseConfig);
-    db = getDatabase(app);
-    window.__db = db;
-    window.__dbReady = true;
-  } catch(e) { window.__dbReady = false; }
-  window.__submitScore = async function(address, score) {
-    if (!window.__dbReady) { window.__addMock(address, score); return; }
-    try { await push(ref(db,'scores'), { address, score, ts: Date.now() }); }
-    catch(e) { window.__addMock(address, score); }
-  };
-  window.__listenScores = function(cb) {
-    if (!window.__dbReady) { cb(window.__mockScores || []); return; }
-    try {
-      const q = query(ref(db,'scores'), orderByChild('score'), limitToLast(50));
-      onValue(q, snap => {
-        const rows = [];
-        snap.forEach(c => rows.push({ id:c.key, ...c.val() }));
-        rows.sort((a,b) => b.score - a.score);
-        cb(rows);
-      });
-    } catch(e) { cb(window.__mockScores || []); }
-  };
-</script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap');
-
 * { margin:0; padding:0; box-sizing:border-box; }
-html, body {
-  font-family: 'Nunito', sans-serif;
-  background: #1a3d1a;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100dvh;
-  overflow: hidden;
-  touch-action: none;
+html,body {
+  font-family:'Nunito',sans-serif; background:#1a3d1a;
+  display:flex; justify-content:center; align-items:center;
+  height:100dvh; overflow:hidden; touch-action:none;
 }
-
 #gameWrapper {
-  position: relative;
-  width: min(420px, 100vw);
-  height: min(700px, 100dvh);
-  overflow: hidden;
-  border-radius: 20px;
-  box-shadow: 0 0 60px #0008;
-  touch-action: none;
+  position:relative; width:min(420px,100vw); height:min(700px,100dvh);
+  overflow:hidden; border-radius:20px; box-shadow:0 0 60px #0008; touch-action:none;
 }
-
-canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  touch-action: none;
-}
-
+canvas { display:block; width:100%; height:100%; touch-action:none; }
 .screen {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 24px 20px;
-  text-align: center;
-  background: linear-gradient(180deg, #0d2b0dee, #1a3d1aee);
-  border-radius: 20px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:12px; padding:24px 20px;
+  text-align:center; background:linear-gradient(180deg,#0d2b0dee,#1a3d1aee);
+  border-radius:20px; overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
 }
-.screen.hidden { display: none; }
-
-h1 {
-  font-family: 'Fredoka One', cursive;
-  font-size: clamp(1.8rem, 8vw, 2.6rem);
-  color: #c8f56a;
-  text-shadow: 0 3px 16px #0008;
-  line-height: 1.1;
-}
-.sub-h { font-size: clamp(1.2rem,5.5vw,1.7rem); }
-p { color: #d4f5a0; font-size: clamp(.85rem,3.2vw,1rem); line-height:1.6; max-width:290px; }
-
+.screen.hidden { display:none; }
+h1 { font-family:'Fredoka One',cursive; font-size:clamp(1.8rem,8vw,2.6rem); color:#c8f56a; text-shadow:0 3px 16px #0008; line-height:1.1; }
+.sub-h { font-size:clamp(1.2rem,5.5vw,1.7rem); }
+p { color:#d4f5a0; font-size:clamp(.85rem,3.2vw,1rem); line-height:1.6; max-width:290px; }
 .btn {
-  font-family: 'Fredoka One', cursive;
-  font-size: clamp(.95rem, 4vw, 1.2rem);
-  color: #1a3d1a;
-  background: linear-gradient(135deg, #c8f56a, #7ecb20);
-  border: none;
-  border-radius: 50px;
-  padding: 13px 36px;
-  cursor: pointer;
-  box-shadow: 0 5px 18px #0005, 0 2px 0 #5a9a10;
-  width: 100%;
-  max-width: 260px;
-  touch-action: auto;
-  -webkit-tap-highlight-color: transparent;
+  font-family:'Fredoka One',cursive; font-size:clamp(.95rem,4vw,1.2rem); color:#1a3d1a;
+  background:linear-gradient(135deg,#c8f56a,#7ecb20); border:none; border-radius:50px;
+  padding:13px 36px; cursor:pointer; box-shadow:0 5px 18px #0005,0 2px 0 #5a9a10;
+  width:100%; max-width:260px; touch-action:auto; -webkit-tap-highlight-color:transparent;
 }
-.btn:active { transform: translateY(2px); box-shadow: 0 2px 8px #0005; }
-.btn-lg { font-size: clamp(1.1rem,5vw,1.35rem); padding: 15px 44px; }
-.btn-orange { background: linear-gradient(135deg,#f5a623,#e07b00); color:#fff; box-shadow:0 5px 18px #0005,0 2px 0 #a05500; }
-.btn-ghost { background: transparent; color: #c8f56a; border: 2px solid #c8f56a44; box-shadow: none; font-size: clamp(.8rem,3.2vw,.95rem); padding: 9px 26px; }
-
+.btn:active { transform:translateY(2px); box-shadow:0 2px 8px #0005; }
+.btn-lg { font-size:clamp(1.1rem,5vw,1.35rem); padding:15px 44px; }
+.btn-orange { background:linear-gradient(135deg,#f5a623,#e07b00); color:#fff; box-shadow:0 5px 18px #0005,0 2px 0 #a05500; }
+.btn-ghost { background:transparent; color:#c8f56a; border:2px solid #c8f56a44; box-shadow:none; font-size:clamp(.8rem,3.2vw,.95rem); padding:9px 26px; }
 .arc-badge { display:flex; align-items:center; gap:6px; background:#ffffff11; border:1px solid #ffffff22; border-radius:50px; padding:6px 14px; font-size:clamp(.65rem,2.6vw,.78rem); color:#a8d8a8; }
 .arc-dot { width:6px; height:6px; background:#4cef80; border-radius:50%; box-shadow:0 0 6px #4cef80; }
-.emoji-big { font-size: clamp(2rem,8vw,3rem); }
+.emoji-big { font-size:clamp(2rem,8vw,3rem); }
 #netWarning { background:#ff4d4d22; border:1px solid #ff4d4d55; border-radius:12px; padding:9px 14px; color:#ffaaaa; font-size:.8rem; max-width:270px; display:none; }
-#savedMsg { font-size:.84rem; display:none; }
+#savedMsg { font-size:.84rem; display:none; padding:6px 12px; border-radius:10px; }
 #finalScore { font-family:'Fredoka One',cursive; font-size:clamp(2rem,10vw,3.2rem); color:#c8f56a; text-shadow:0 0 24px #6fcf2a88; }
-
 .rules-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; width:100%; max-width:310px; }
 .rule-card { background:#ffffff0d; border:1px solid #c8f56a22; border-radius:14px; padding:11px 9px; }
 .rule-card.arc-card { background:#1a3d6a22; border-color:#4a9eff44; }
@@ -142,32 +54,26 @@ p { color: #d4f5a0; font-size: clamp(.85rem,3.2vw,1rem); line-height:1.6; max-wi
 .tip-row span { font-size:1rem; flex-shrink:0; }
 .tip-row p { font-size:clamp(.68rem,2.8vw,.82rem); text-align:left; margin:0; max-width:none; color:#d4f5a0; }
 .divider { width:100%; max-width:310px; border:none; border-top:1px solid #c8f56a18; }
-
 #hud { position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:44px 16px 0; pointer-events:none; z-index:5; }
 #scoreDisplay { font-family:'Fredoka One',cursive; font-size:clamp(1.2rem,5.5vw,1.55rem); color:#c8f56a; text-shadow:0 2px 8px #0008; }
 #livesDisplay { font-size:clamp(.9rem,4vw,1.2rem); letter-spacing:3px; }
 #levelBadge { position:absolute; top:40px; left:50%; transform:translateX(-50%); font-family:'Fredoka One',cursive; font-size:clamp(.56rem,2.4vw,.7rem); color:#c8f56a88; pointer-events:none; white-space:nowrap; z-index:5; }
-
 #walletBar { position:absolute; top:8px; left:50%; transform:translateX(-50%); background:#0d2b0dcc; border:1px solid #c8f56a33; border-radius:50px; padding:5px 13px; display:none; align-items:center; gap:6px; font-size:clamp(.62rem,2.6vw,.78rem); color:#c8f56a; font-family:'Fredoka One',cursive; pointer-events:none; z-index:10; white-space:nowrap; }
 #walletDot { width:7px; height:7px; background:#c8f56a; border-radius:50%; box-shadow:0 0 5px #c8f56a; animation:pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
 #lbBtn { position:absolute; bottom:12px; right:12px; z-index:20; background:linear-gradient(135deg,#c8f56a,#7ecb20); border:none; border-radius:50px; padding:8px 16px; font-family:'Fredoka One',cursive; font-size:clamp(.76rem,3.2vw,.9rem); color:#1a3d1a; cursor:pointer; box-shadow:0 4px 14px #0006; display:flex; align-items:center; gap:5px; touch-action:auto; -webkit-tap-highlight-color:transparent; }
 #lbBtn:active { transform:scale(.95); }
 #builderCredit { position:absolute; bottom:12px; left:12px; z-index:20; display:flex; align-items:center; gap:6px; background:#0d2b0dcc; border:1px solid #c8f56a22; border-radius:50px; padding:5px 11px; text-decoration:none; touch-action:auto; }
 .bc-label { font-size:clamp(.5rem,2.2vw,.64rem); color:#6a9a6a; line-height:1.2; }
 .bc-name { font-family:'Fredoka One',cursive; font-size:clamp(.6rem,2.5vw,.76rem); color:#c8f56a; line-height:1.2; }
-
 #arcPopup { position:absolute; top:38%; left:50%; transform:translate(-50%,-50%); background:linear-gradient(135deg,#1a3d6a,#0d2b50); border:2px solid #4a9eff88; border-radius:18px; padding:11px 24px; text-align:center; pointer-events:none; opacity:0; transition:opacity .2s; z-index:25; }
 #arcPopup.show { opacity:1; }
 .arc-bonus-title { font-family:'Fredoka One',cursive; font-size:clamp(1rem,4.5vw,1.25rem); color:#4a9eff; }
 .arc-bonus-pts { font-family:'Fredoka One',cursive; font-size:clamp(1.4rem,6vw,1.8rem); color:#fff; text-shadow:0 0 18px #4a9effaa; }
-
 #speedFlash { position:absolute; inset:0; border-radius:20px; pointer-events:none; border:3px solid transparent; z-index:5; }
 #speedFlash.warn { border-color:#ff4d4daa; box-shadow:inset 0 0 28px #ff4d4d33; }
-
 #dashOverlay { position:absolute; inset:0; background:#000b; display:none; align-items:flex-end; justify-content:center; z-index:30; border-radius:20px; touch-action:auto; }
-#dashPanel { background:linear-gradient(170deg,#0d2b0d,#1a3d1a); border-radius:20px 20px 0 0; width:100%; max-height:90%; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 -8px 36px #000a; }
+#dashPanel { background:linear-gradient(170deg,#0d2b0d,#1a3d1a); border-radius:20px 20px 0 0; width:100%; max-height:92%; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 -8px 36px #000a; }
 #dashHeader { display:flex; justify-content:space-between; align-items:center; padding:16px 18px 12px; border-bottom:1px solid #c8f56a22; }
 #dashHeader h2 { font-family:'Fredoka One',cursive; color:#c8f56a; font-size:clamp(1.05rem,4.8vw,1.35rem); }
 #closeBtn { background:none; border:none; color:#c8f56a88; font-size:1.5rem; cursor:pointer; line-height:1; touch-action:auto; padding:4px 8px; }
@@ -212,23 +118,17 @@ p { color: #d4f5a0; font-size: clamp(.85rem,3.2vw,1rem); line-height:1.6; max-wi
     <span id="walletAddr">0x0000...0000</span>
     <span style="color:#6a9a6a">| Arc</span>
   </div>
-
   <div id="hud">
     <div id="scoreDisplay">🌿 0</div>
     <div id="livesDisplay">❤️❤️❤️</div>
   </div>
   <div id="levelBadge"></div>
-
   <button id="lbBtn" onclick="openDash()">🏆 Ranks</button>
   <a id="builderCredit" href="https://x.com/Bash06809279101" target="_blank" rel="noopener">
     <span style="font-size:.9rem">🐦</span>
     <div><div class="bc-label">Built by</div><div class="bc-name">@Bash06809279101</div></div>
   </a>
-
-  <div id="arcPopup">
-    <div class="arc-bonus-title">⚡ ARC Caught!</div>
-    <div class="arc-bonus-pts">+20 pts</div>
-  </div>
+  <div id="arcPopup"><div class="arc-bonus-title">⚡ ARC Caught!</div><div class="arc-bonus-pts">+20 pts</div></div>
   <div id="speedFlash"></div>
 
   <!-- WALLET SCREEN -->
@@ -290,7 +190,7 @@ p { color: #d4f5a0; font-size: clamp(.85rem,3.2vw,1rem); line-height:1.6; max-wi
     <button class="btn btn-ghost" onclick="openDash()">🏆 See Rankings</button>
   </div>
 
-  <!-- DASHBOARD POPUP -->
+  <!-- DASHBOARD -->
   <div id="dashOverlay">
     <div id="dashPanel">
       <div id="dashHeader">
@@ -319,6 +219,40 @@ p { color: #d4f5a0; font-size: clamp(.85rem,3.2vw,1rem); line-height:1.6; max-wi
 </div>
 
 <script>
+/* ============================================================
+   LEADERBOARD — localStorage (works immediately, per device)
+   
+   To make scores truly global across all players/devices,
+   replace saveScore() and loadScores() with Firebase calls:
+   
+   1. Go to https://console.firebase.google.com
+   2. Create project → Realtime Database → Start in test mode
+   3. Replace the two functions below with:
+      saveScore  → push(ref(db,'scores'), {address, score, ts})
+      loadScores → get(ref(db,'scores')) then parse snapshot
+   ============================================================ */
+const LS_KEY = 'junglecatch_scores_v2';
+
+function loadScores() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveScore(address, score) {
+  try {
+    const all = loadScores();
+    all.push({ address, score, ts: Date.now() });
+    localStorage.setItem(LS_KEY, JSON.stringify(all));
+    return true;
+  } catch(e) {
+    console.error('Score save failed:', e);
+    return false;
+  }
+}
+
+/* ============================================================
+   ARC TESTNET
+   ============================================================ */
 const ARC_CHAIN_ID = '0x4CFF52';
 const ARC_NETWORK = {
   chainId: ARC_CHAIN_ID, chainName: 'Arc Testnet',
@@ -327,36 +261,26 @@ const ARC_NETWORK = {
   blockExplorerUrls: ['https://testnet.arcscan.app']
 };
 
-window.__mockScores = [
-  {address:'0xA1b2C3d4E5f6A1b2C3d4E5f6A1b2C3d4E5f6A1b2', score:47, ts:Date.now()-1000},
-  {address:'0xF9e8D7c6B5a4F9e8D7c6B5a4F9e8D7c6B5a4F9e8', score:38, ts:Date.now()-2000},
-  {address:'0x1234567890AbCdEf1234567890AbCdEf12345678', score:31, ts:Date.now()-3000},
-  {address:'0xAbCdEf012345AbCdEf012345AbCdEf012345AbCd', score:24, ts:Date.now()-4000},
-  {address:'0x9999000011112222333344445555666677778888', score:17, ts:Date.now()-5000},
-];
-window.__addMock = function(addr, sc) {
-  window.__mockScores.push({address:addr, score:sc, ts:Date.now()});
-  window.__mockScores.sort((a,b)=>b.score-a.score);
-  if (window.__onScoresUpdate) window.__onScoresUpdate(window.__mockScores);
-};
-
+/* ============================================================
+   WALLET
+   ============================================================ */
 let connectedAddress = null;
 
 async function switchToArc() {
   try {
-    await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC_CHAIN_ID}]});
+    await window.ethereum.request({ method:'wallet_switchEthereumChain', params:[{chainId:ARC_CHAIN_ID}] });
     return true;
   } catch(e1) {
     if (e1.code===4902||e1.code===-32603) {
       try {
-        await window.ethereum.request({method:'wallet_addEthereumChain',params:[ARC_NETWORK]});
+        await window.ethereum.request({ method:'wallet_addEthereumChain', params:[ARC_NETWORK] });
         return true;
       } catch(e2) {
         if (e2.code===-32603||(e2.message&&(e2.message.includes('already')||e2.message.includes('same RPC')))) {
           try {
-            await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:ARC_CHAIN_ID}]});
+            await window.ethereum.request({ method:'wallet_switchEthereumChain', params:[{chainId:ARC_CHAIN_ID}] });
             return true;
-          } catch(e3){return false;}
+          } catch(e3) { return false; }
         }
         return false;
       }
@@ -370,7 +294,7 @@ async function connectWallet() {
   const warn=document.getElementById('netWarning');
   warn.style.display='none';
   if (typeof window.ethereum==='undefined') {
-    alert('No wallet found!\nOn mobile: use the MetaMask app browser.\nOn desktop: install MetaMask.');
+    alert('No wallet found!\nOn mobile: use the MetaMask in-app browser.\nOn desktop: install MetaMask.');
     return;
   }
   try {
@@ -381,10 +305,9 @@ async function connectWallet() {
     if (chainId!==ARC_CHAIN_ID) {
       const ok=await switchToArc();
       if (!ok) {
-        warn.textContent='⚠️ Could not switch to Arc Testnet.';
+        warn.textContent='⚠️ Could not switch to Arc Testnet — scores may not save.';
         warn.style.display='block';
         setTimeout(()=>warn.style.display='none',4000);
-        onWalletConnected(connectedAddress); return;
       }
     }
     onWalletConnected(connectedAddress);
@@ -416,37 +339,30 @@ function showHow() {
   document.getElementById('howScreen').classList.remove('hidden');
 }
 
+/* ============================================================
+   LEADERBOARD UI
+   ============================================================ */
 function openDash() {
   document.getElementById('dashOverlay').style.display='flex';
-  loadLeaderboard();
+  renderDashFromStorage();
 }
 function closeDash(){document.getElementById('dashOverlay').style.display='none';}
 document.getElementById('dashOverlay').addEventListener('click',e=>{if(e.target.id==='dashOverlay')closeDash();});
 
-function loadLeaderboard() {
-  document.getElementById('lbList').innerHTML=
-    '<div class="lb-cols"><span class="col-rank">#</span><span class="col-addr">Wallet</span><span class="col-score">Score</span></div>'+
-    '<div class="lb-loading">🌿 Loading...</div>';
-  const render=scores=>{window.__onScoresUpdate=render;renderDash(scores);};
-  if (typeof window.__listenScores==='function') window.__listenScores(render);
-  else setTimeout(()=>{
-    if (typeof window.__listenScores==='function') window.__listenScores(render);
-    else render(window.__mockScores);
-  },1000);
-}
-
-function renderDash(scores) {
-  scores=scores||[];
+function renderDashFromStorage() {
+  const all=loadScores();
   const byAddr={};
-  scores.forEach(s=>{
-    const k=(s.address||'anon').toLowerCase();
+  all.forEach(s=>{
+    const k=(s.address||'guest').toLowerCase();
     if (!byAddr[k]||s.score>byAddr[k].score) byAddr[k]=s;
   });
   const ranked=Object.values(byAddr).sort((a,b)=>b.score-a.score);
+
   document.getElementById('statPlayers').textContent=ranked.length;
   document.getElementById('statTopScore').textContent=ranked.length?ranked[0].score:0;
   const avg=ranked.length?Math.round(ranked.reduce((s,r)=>s+r.score,0)/ranked.length):0;
   document.getElementById('statAvg').textContent=avg;
+
   if (connectedAddress) {
     const mk=connectedAddress.toLowerCase();
     const mi=ranked.findIndex(r=>r.address&&r.address.toLowerCase()===mk);
@@ -457,9 +373,11 @@ function renderDash(scores) {
       document.getElementById('mrcPts').textContent=ranked[mi].score+' pts';
     }
   }
+
   const list=document.getElementById('lbList');
   list.innerHTML='<div class="lb-cols"><span class="col-rank">#</span><span class="col-addr">Wallet</span><span class="col-score">Score</span></div>';
-  if (!ranked.length){list.innerHTML+='<div class="lb-empty">No scores yet!<br>🌴 Be the first!</div>';return;}
+  if (!ranked.length){list.innerHTML+='<div class="lb-empty">No scores yet!<br>🌴 Play a game to get on the board!</div>';return;}
+
   const medals=['🥇','🥈','🥉'],rc=['r1','r2','r3'];
   const mk2=connectedAddress?connectedAddress.toLowerCase():null;
   ranked.slice(0,25).forEach((e,i)=>{
@@ -474,12 +392,18 @@ function renderDash(scores) {
   });
 }
 
+/* ============================================================
+   SUBMIT SCORE
+   ============================================================ */
 function submitScore(sc) {
   if (!connectedAddress||sc<=0) return;
-  if (typeof window.__submitScore==='function') window.__submitScore(connectedAddress,sc);
+  const saved=saveScore(connectedAddress,sc);
+  console.log(saved?'✅ Score saved':'❌ Score save failed', connectedAddress, sc);
 }
 
-/* ── CANVAS ── */
+/* ============================================================
+   CANVAS
+   ============================================================ */
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d');
 const wrapper=document.getElementById('gameWrapper');
@@ -487,16 +411,16 @@ function resize(){canvas.width=wrapper.clientWidth;canvas.height=wrapper.clientH
 resize();
 window.addEventListener('resize',resize);
 
-/* ── CONSTANTS ── */
+/* ============================================================
+   GAME STATE
+   ============================================================ */
 const FRUITS=['🍌','🍍','🥭','🍊','🍇','🍓','🍈','🥝'];
 const BOMBS=['💀','🐍'];
 
-/* ── GAME STATE — single object, no scattered globals ── */
 const G={state:'idle',score:0,lives:3,level:1,lastLevel:1,over:false,spawnTimer:0,spawnInterval:90,targetX:0,animId:null};
 const basket={x:0,y:0,w:80,h:44};
 let items=[],particles=[],leaves=[];
 
-/* ── INIT ── */
 function initLeaves(){
   leaves=[];
   for(let i=0;i<16;i++) leaves.push({
@@ -535,7 +459,6 @@ function updateLevelBadge(){
   }
 }
 
-/* ── SPAWN ── */
 function spawnItem(){
   const isArc=Math.random()<0.05;
   const bombPc=Math.min(0.60,0.10+G.level*0.05);
@@ -543,17 +466,9 @@ function spawnItem(){
   let emoji='';
   if(!isArc) emoji=isBomb?BOMBS[Math.floor(Math.random()*BOMBS.length)]:FRUITS[Math.floor(Math.random()*FRUITS.length)];
   const spd=2.4+G.level*0.8+Math.random()*1.6;
-  items.push({
-    x:30+Math.random()*(canvas.width-60),y:-35,
-    vy:spd,vx:(Math.random()-.5)*(1.0+G.level*0.12),
-    size:isArc?36:32+Math.random()*10,
-    emoji,bomb:isBomb,arc:isArc,
-    rot:0,spin:(Math.random()-.5)*.1,
-    done:false
-  });
+  items.push({x:30+Math.random()*(canvas.width-60),y:-35,vy:spd,vx:(Math.random()-.5)*(1.0+G.level*0.12),size:isArc?36:32+Math.random()*10,emoji,bomb:isBomb,arc:isArc,rot:0,spin:(Math.random()-.5)*.1,done:false});
 }
 
-/* ── PARTICLES ── */
 function burst(x,y,good){
   const cols=good?['#c8f56a','#7ecb20','#ffe066','#ff9f43','#fff']:['#ff4d4d','#ff6b6b','#ffa07a'];
   for(let i=0;i<12;i++){
@@ -568,12 +483,10 @@ function arcBurst(x,y){
     particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2.5,life:1,decay:.026+Math.random()*.028,size:4+Math.random()*9,color:['#4a9eff','#a0d4ff','#fff','#c8f56a'][Math.floor(Math.random()*4)]});
   }
   const el=document.getElementById('arcPopup');
-  el.classList.add('show');
-  clearTimeout(el._t);
+  el.classList.add('show');clearTimeout(el._t);
   el._t=setTimeout(()=>el.classList.remove('show'),1300);
 }
 
-/* ── DRAW ── */
 function drawBG(){
   const sky=ctx.createLinearGradient(0,0,0,canvas.height*.55);
   sky.addColorStop(0,'#1a3d1a');sky.addColorStop(1,'#2d6a2d');
@@ -610,7 +523,6 @@ function drawBasket(){
     const fy=by-bh/2+(bh/4)*(i+.5);
     ctx.beginPath();ctx.moveTo(bx-bw/2+i*2,fy);ctx.lineTo(bx+bw/2-i*2,fy);ctx.stroke();
   }
-  // Rounded rim — manual path for mobile browser compatibility (no roundRect)
   ctx.fillStyle='#e09a1a';
   const rx=bx-bw/2-4,ry=by-bh/2-6,rw=bw+8,rh=14,rad=6;
   ctx.beginPath();
@@ -657,7 +569,9 @@ function drawParticles(){
   }
 }
 
-/* ── GAME LOOP ── */
+/* ============================================================
+   GAME LOOP
+   ============================================================ */
 function gameLoop(){
   G.animId=requestAnimationFrame(gameLoop);
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -687,32 +601,22 @@ function gameLoop(){
     for(let i=items.length-1;i>=0;i--){
       const it=items[i];
       if(it.done){items.splice(i,1);continue;}
-
       it.x+=it.vx;it.y+=it.vy;it.rot+=it.spin;
-
-      // Wall bounce
       if(it.x<it.size/2){it.x=it.size/2;it.vx=Math.abs(it.vx);}
       if(it.x>canvas.width-it.size/2){it.x=canvas.width-it.size/2;it.vx=-Math.abs(it.vx);}
 
-      // Catch check
       const inX=it.x>basket.x-basket.w/2-it.size/4&&it.x<basket.x+basket.w/2+it.size/4;
       const inY=it.y+it.size/2>basket.y-basket.h/2&&it.y-it.size/2<basket.y+basket.h/2;
       if(inX&&inY){
         it.done=true;
-        if(it.arc){
-          G.score+=20;arcBurst(it.x,it.y);
-        } else if(it.bomb){
-          G.lives=Math.max(0,G.lives-1);burst(it.x,it.y,false);
-        } else {
-          G.score++;burst(it.x,it.y,true);
-        }
+        if(it.arc){G.score+=20;arcBurst(it.x,it.y);}
+        else if(it.bomb){G.lives=Math.max(0,G.lives-1);burst(it.x,it.y,false);}
+        else{G.score++;burst(it.x,it.y,true);}
         updateHUD();
         if(G.lives<=0&&!G.over){G.over=true;doGameOver();}
-        items.splice(i,1);
-        continue;
+        items.splice(i,1);continue;
       }
 
-      // Fell off bottom
       if(it.y>canvas.height+30){
         it.done=true;
         if(!it.bomb&&!it.arc){
@@ -720,8 +624,7 @@ function gameLoop(){
           updateHUD();
           if(G.lives<=0&&!G.over){G.over=true;doGameOver();}
         }
-        items.splice(i,1);
-        continue;
+        items.splice(i,1);continue;
       }
     }
   }
@@ -731,7 +634,9 @@ function gameLoop(){
   drawBasket();
 }
 
-/* ── GAME OVER ── */
+/* ============================================================
+   GAME OVER
+   ============================================================ */
 function doGameOver(){
   G.state='dead';
   submitScore(G.score);
@@ -740,18 +645,24 @@ function doGameOver(){
   document.getElementById('gameOverMsg').textContent=msgs[Math.floor(Math.random()*msgs.length)];
   const sm=document.getElementById('savedMsg');
   sm.style.display='block';
-  if(connectedAddress){sm.style.color='#c8f56a';sm.textContent='✅ Score saved to leaderboard!';}
-  else{sm.style.color='#a8d8a8';sm.textContent='🔒 Connect wallet to rank on the leaderboard!';}
+  if(connectedAddress){
+    sm.style.background='#c8f56a18';sm.style.color='#c8f56a';
+    sm.textContent='✅ Score saved! Tap 🏆 Ranks to see your position.';
+  } else {
+    sm.style.background='transparent';sm.style.color='#a8d8a8';
+    sm.textContent='🔒 Connect wallet to appear on the leaderboard!';
+  }
   setTimeout(()=>document.getElementById('gameOverScreen').classList.remove('hidden'),400);
 }
 
-/* ── START ── */
+/* ============================================================
+   START / RESTART
+   ============================================================ */
 function startGame(){
   document.getElementById('howScreen').classList.add('hidden');
   document.getElementById('gameOverScreen').classList.add('hidden');
   if(G.animId)cancelAnimationFrame(G.animId);
-  resetGame();
-  G.state='playing';
+  resetGame();G.state='playing';
   gameLoop();
 }
 
@@ -759,20 +670,20 @@ document.getElementById('howStartBtn').addEventListener('click',startGame);
 document.getElementById('restartBtn').addEventListener('click',startGame);
 document.getElementById('howAgainBtn').addEventListener('click',showHow);
 
-/* ── CONTROLS ── */
+/* ============================================================
+   CONTROLS
+   ============================================================ */
 canvas.addEventListener('mousemove',e=>{
   if(G.state!=='playing')return;
   const r=canvas.getBoundingClientRect();
   G.targetX=(e.clientX-r.left)*(canvas.width/r.width);
 });
-
 canvas.addEventListener('touchstart',e=>{
   e.preventDefault();
   if(G.state!=='playing')return;
   const r=canvas.getBoundingClientRect();
   G.targetX=(e.touches[0].clientX-r.left)*(canvas.width/r.width);
 },{passive:false});
-
 canvas.addEventListener('touchmove',e=>{
   e.preventDefault();
   if(G.state!=='playing')return;
@@ -780,7 +691,9 @@ canvas.addEventListener('touchmove',e=>{
   G.targetX=(e.touches[0].clientX-r.left)*(canvas.width/r.width);
 },{passive:false});
 
-/* ── BOOT ── */
+/* ============================================================
+   BOOT
+   ============================================================ */
 initLeaves();
 resetGame();
 basket.x=canvas.width/2;
