@@ -122,6 +122,7 @@
         #sndBtn:active { transform: scale(.9); }
         .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #c8f56a33; border-top-color: #c8f56a; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .debug-info { font-size: 10px; color: #888; margin-top: 5px; font-family: monospace; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -208,16 +209,70 @@ function sndLevelUp(){ [262,330,392,523,784].forEach((f,i)=>playTone(f,'square',
 function sndGameOver(){ [330,294,262,220,165].forEach((f,i)=>playTone(f,'sawtooth',0.18,0.22,i*0.11)); }
 function toggleSound(){ SOUND_ON=!SOUND_ON; document.getElementById('sndBtn').textContent=SOUND_ON?'🔊':'🔇'; if(SOUND_ON) sndCatch(); }
 
-// FIREBASE
-const firebaseConfig={ apiKey:"AIzaSyDWzftE7ytniz3Zl5EuhAwtcMVRausPrW8", authDomain:"junglecatch-db.firebaseapp.com", projectId:"junglecatch-db", storageBucket:"junglecatch-db.appspot.com", messagingSenderId:"1052239648783", appId:"1:1052239648783:web:aaa6f2f1951955e8f9eb7a" };
-firebase.initializeApp(firebaseConfig);
-const db=firebase.firestore();
-let WALLET=null;
+// FIREBASE with better error handling
+const firebaseConfig={ 
+    apiKey:"AIzaSyDWzftE7ytniz3Zl5EuhAwtcMVRausPrW8", 
+    authDomain:"junglecatch-db.firebaseapp.com", 
+    projectId:"junglecatch-db", 
+    storageBucket:"junglecatch-db.appspot.com", 
+    messagingSenderId:"1052239648783", 
+    appId:"1:1052239648783:web:aaa6f2f1951955e8f9eb7a" 
+};
+
+let db = null;
+let firebaseInitialized = false;
+
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseInitialized = true;
+    console.log('Firebase initialized successfully');
+} catch(e) {
+    console.error('Firebase initialization error:', e);
+    firebaseInitialized = false;
+}
+
+let WALLET = null;
 let currentScore = 0;
 
-// Improved score saving with better error handling
+// Local storage fallback for scores
+function saveScoreLocal(addr, score) {
+    try {
+        const localScores = JSON.parse(localStorage.getItem('junglecatch_scores') || '{}');
+        if (!localScores[addr] || score > localScores[addr]) {
+            localScores[addr] = score;
+            localStorage.setItem('junglecatch_scores', JSON.stringify(localScores));
+        }
+        return true;
+    } catch(e) {
+        console.error('Local save error:', e);
+        return false;
+    }
+}
+
+function getLocalScores() {
+    try {
+        return JSON.parse(localStorage.getItem('junglecatch_scores') || '{}');
+    } catch(e) {
+        return {};
+    }
+}
+
+// Improved score saving with local fallback
 async function lbAdd(addr, score) { 
-    if(!addr || !score || score === 0) return false; 
+    if(!addr || !score || score === 0) {
+        console.log('Score not saved: invalid data');
+        return false; 
+    }
+    
+    // Always save locally first
+    saveScoreLocal(addr, score);
+    
+    if (!firebaseInitialized || !db) {
+        console.log('Firebase not available, saved locally only');
+        return false;
+    }
+    
     try {
         await db.collection('scores').add({ 
             address: addr.toLowerCase(), 
@@ -225,51 +280,57 @@ async function lbAdd(addr, score) {
             time: Date.now(),
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         }); 
-        console.log('Score saved:', score, 'for wallet:', addr);
+        console.log('Score saved to Firebase:', score, 'for wallet:', addr);
         return true;
     } catch(e) {
-        console.error('Error saving score:', e);
+        console.error('Firebase save error:', e);
+        console.log('Score saved locally only due to Firebase error');
         return false;
     }
 }
 
-// Improved leaderboard fetch with caching
-let cachedLeaderboard = null;
-let lastFetch = 0;
-const CACHE_DURATION = 30000; // 30 seconds cache
-
+// Improved leaderboard fetch with local fallback
 async function lbFetch() {
-    // Return cached data if still fresh
-    if (cachedLeaderboard && (Date.now() - lastFetch) < CACHE_DURATION) {
-        return cachedLeaderboard;
+    // If Firebase is available, try to fetch from there
+    if (firebaseInitialized && db) {
+        try {
+            const snap = await db.collection('scores')
+                .orderBy('score', 'desc')
+                .limit(200)
+                .get();
+            
+            const best = {};
+            snap.forEach(d => { 
+                const data = d.data(); 
+                if(data.address && data.score) {
+                    if(!best[data.address] || data.score > best[data.address]) {
+                        best[data.address] = data.score;
+                    }
+                }
+            });
+            
+            const firebaseScores = Object.entries(best)
+                .map(([a,s]) => ({a: a.toLowerCase(), s: s}))
+                .sort((x,y) => y.s - x.s);
+            
+            return firebaseScores;
+        } catch(e) {
+            console.error('Firebase fetch error:', e);
+            // Fall back to local scores
+            return getLocalLeaderboard();
+        }
     }
     
-    try {
-        const snap = await db.collection('scores')
-            .orderBy('score', 'desc')
-            .limit(200)
-            .get();
-        
-        const best = {};
-        snap.forEach(d => { 
-            const data = d.data(); 
-            if(data.address && data.score) {
-                if(!best[data.address] || data.score > best[data.address]) {
-                    best[data.address] = data.score;
-                }
-            }
-        });
-        
-        cachedLeaderboard = Object.entries(best)
-            .map(([a,s]) => ({a: a.toLowerCase(), s: s}))
-            .sort((x,y) => y.s - x.s);
-        lastFetch = Date.now();
-        
-        return cachedLeaderboard;
-    } catch(e) {
-        console.error('Error fetching leaderboard:', e);
-        return cachedLeaderboard || [];
-    }
+    // Fall back to local scores
+    return getLocalLeaderboard();
+}
+
+function getLocalLeaderboard() {
+    const localScores = getLocalScores();
+    const leaderboard = Object.entries(localScores)
+        .map(([a,s]) => ({a: a.toLowerCase(), s: s}))
+        .sort((x,y) => y.s - x.s);
+    return leaderboard;
 }
 
 // ─── WALLET CONNECTION ────────────────────────────────────────────────────────
@@ -465,23 +526,21 @@ function gameOver(){
         sm.innerHTML = '<div class="loading-spinner"></div> Saving score...';
         lbAdd(WALLET, SCORE).then((saved) => { 
             if(saved) {
-                sm.innerHTML = '✅ Score saved! Tap 🏆 to see rankings.';
+                sm.innerHTML = '✅ Score saved to cloud! Tap 🏆 to see rankings.';
                 sm.style.background='#c8f56a18';
-                // Clear cache to force refresh on next leaderboard view
-                cachedLeaderboard = null;
             } else {
-                sm.innerHTML = '⚠️ Score could not be saved. Try again?';
-                sm.style.background='#ff4d4d18';
+                sm.innerHTML = '✅ Score saved locally! (Cloud save failed)';
+                sm.style.background='#f5a62318';
             }
         }).catch(()=>{ 
-            sm.innerHTML = '❌ Could not save score. Check connection.';
-            sm.style.background='#ff4d4d18';
+            sm.innerHTML = '✅ Score saved locally! (Network issue)';
+            sm.style.background='#f5a62318';
         }); 
     } else if(WALLET && SCORE === 0) {
         sm.innerHTML = '🔒 Score was 0, not saved to leaderboard.';
         sm.style.background='#ffffff18';
     } else { 
-        sm.innerHTML = '🔒 Connect wallet to appear on leaderboard!';
+        sm.innerHTML = '🔒 Connect wallet to save scores!';
         sm.style.background='#ffffff08';
     } 
     document.getElementById('gos').classList.remove('hidden'); 
@@ -505,14 +564,13 @@ async function renderLB(){
     list.innerHTML='<div class="lem"><div class="loading-spinner"></div> Loading scores...</div>'; 
     
     try {
-        const ranked=await lbFetch(); 
+        const ranked = await lbFetch(); 
         
         document.getElementById('stP').textContent=ranked.length; 
         document.getElementById('stT').textContent=ranked.length?ranked[0].s:0; 
         const avg=ranked.length?Math.round(ranked.reduce((s,r)=>s+r.s,0)/ranked.length):0; 
         document.getElementById('stA').textContent=avg; 
         
-        // Show user's rank if wallet connected
         if(WALLET){ 
             const idx=ranked.findIndex(r=>r.a===WALLET.toLowerCase()); 
             if(idx>=0){ 
@@ -521,22 +579,15 @@ async function renderLB(){
                 document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
                 document.getElementById('myP').textContent=ranked[idx].s+' pts'; 
             } else { 
-                document.getElementById('mc').style.display='none';
-                // Check if user has any scores
-                const userScores = await db.collection('scores').where('address', '==', WALLET.toLowerCase()).get();
-                if(userScores.empty) {
-                    const mcDiv = document.getElementById('mc');
-                    mcDiv.style.display='flex';
-                    document.getElementById('myR').textContent='#—'; 
-                    document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
-                    document.getElementById('myP').textContent='No scores yet';
-                }
-            } 
+                document.getElementById('mc').style.display='flex'; 
+                document.getElementById('myR').textContent='#—'; 
+                document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
+                document.getElementById('myP').textContent='Play to get on board!';
+            }
         } else { 
             document.getElementById('mc').style.display='none'; 
         } 
         
-        // Build leaderboard list
         list.innerHTML='<div class="lhd"><span class="c1">#</span><span class="c2">Wallet</span><span class="c3">Score</span></div>'; 
         if(!ranked.length){ 
             list.innerHTML+='<div class="lem">No scores yet! Be first 🍌</div>'; 
@@ -550,6 +601,16 @@ async function renderLB(){
             row.innerHTML=`<div class="lrk">${i+1}</div><div class="lad">${me?'⭐ You':e.a.slice(0,8)+'...'}</div><div class="lsc">${e.s}</div>`; 
             list.appendChild(row); 
         });
+        
+        // Add note if using local only
+        if (!firebaseInitialized || ranked.length === 0) {
+            const note = document.createElement('div');
+            note.className = 'lem';
+            note.style.fontSize = '10px';
+            note.style.padding = '10px';
+            note.innerHTML = '📌 Using local storage - scores saved on this device only';
+            list.appendChild(note);
+        }
     } catch(e) {
         console.error('Error rendering leaderboard:', e);
         list.innerHTML='<div class="lem">⚠️ Error loading scores. Try again.</div>';
