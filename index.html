@@ -238,32 +238,53 @@ async function tryArcChain(){
     }
 }
 
-async function connectWallet(){
-    if(!window.ethereum){ showNW('⚠️ No wallet found! Please install MetaMask.'); setTimeout(hideNW,4000); return; }
+async function connectWallet() {
+    if(!window.ethereum){ 
+        showNW('⚠️ No wallet found! Please install MetaMask.'); 
+        setTimeout(hideNW,4000); 
+        return; 
+    }
     if(document.getElementById('conBtn').disabled) return;
+    
     const btn=document.getElementById('conBtn');
     btn.disabled=true;
     btn.textContent='⏳ Connecting...';
     hideNW();
+    
     try {
         const accounts=await ethereum.request({ method:'eth_requestAccounts' });
-        if(!accounts||accounts.length===0) throw { code:0, message:'No accounts returned.' };
+        if(!accounts||accounts.length===0) throw new Error('No accounts returned.');
 
-        // Set wallet & navigate IMMEDIATELY — do not await chain switch
+        // Set wallet
         setWallet(accounts[0]);
-        tryArcChain(); // background only
+        
+        // Try to add Arc chain (do in background)
+        tryArcChain().catch(console.warn);
+        
         hideNW();
-        showHow();
-
+        
+        // IMPORTANT: Show success message then transition to how-to screen
+        showNW('✅ Wallet connected! Click Start Playing!', true);
+        setTimeout(() => {
+            hideNW();
+            // Transition to how-to screen
+            document.getElementById('ws').classList.add('hidden');
+            document.getElementById('hs').classList.remove('hidden');
+            setUI('how');
+        }, 1500);
+        
     } catch(err){
+        console.error('Connection error:', err);
         btn.disabled=false;
         btn.textContent='🦊 Connect Wallet';
+        
         if(err.code===4001) showNW('⚠️ You cancelled the connection. Try again!');
         else if(err.code===-32002) showNW('⚠️ MetaMask already open — check the extension popup!');
         else showNW('⚠️ '+(err.message||'Connection failed. Try again.'));
         setTimeout(hideNW,5000);
     }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 if(window.ethereum){
@@ -286,8 +307,47 @@ function showChBadge(){ const done=CHALLENGES.filter(c=>c.done).length; const ba
 function openChallenge(){ document.getElementById('chdo').style.display='flex'; const list=document.getElementById('chlist'); list.innerHTML=''; CHALLENGES.forEach(c=>{ const percent=(c.progress/c.target)*100; const div=document.createElement('div'); div.className=`chitem ${c.done?'done':''}`; div.innerHTML=`<div class="chicon">${c.icon}</div><div class="chinfo"><div class="chtitle">${c.title}</div><div class="chdesc">${c.desc}</div><div class="chprog"><div class="chprogfill" style="width:${percent}%"></div></div><div style="font-size:.7rem;color:#aaa">${c.progress}/${c.target}</div></div>${c.done?'<div class="chtick">✅</div>':''}`; list.appendChild(div); }); const doneCount=CHALLENGES.filter(c=>c.done).length; document.getElementById('chreset').textContent=`${doneCount}/${CHALLENGES.length} completed · Resets at midnight`; }
 function closeChallenge(){ document.getElementById('chdo').style.display='none'; }
 
-function setUI(screen){ const cred=document.getElementById('cred'),lbb=document.getElementById('lbb'),wb=document.getElementById('wb'),chb=document.getElementById('chbadge'),snd=document.getElementById('sndBtn'); if(screen==='home'){ cred.style.display='flex'; lbb.style.display='none'; chb.style.display='flex'; snd.style.display='none'; if(WALLET) wb.style.display='flex'; else wb.style.display='none'; } else if(screen==='playing'){ cred.style.display='none'; lbb.style.display='flex'; chb.style.display='none'; snd.style.display='flex'; if(WALLET) wb.style.display='flex'; else wb.style.display='none'; } else { cred.style.display='none'; lbb.style.display='flex'; chb.style.display='flex'; snd.style.display='none'; wb.style.display='none'; } }
-function showHow(){ document.getElementById('ws').classList.add('hidden'); document.getElementById('hs').classList.remove('hidden'); setUI('how'); }
+function setUI(screen){
+    const cred=document.getElementById('cred');
+    const lbb=document.getElementById('lbb');
+    const wb=document.getElementById('wb');
+    const chb=document.getElementById('chbadge');
+    const snd=document.getElementById('sndBtn');
+    
+    if(screen==='home'){
+        cred.style.display='flex';
+        lbb.style.display='none';
+        chb.style.display='flex';
+        snd.style.display='none';
+        if(WALLET) wb.style.display='flex';
+        else wb.style.display='none';
+    } else if(screen==='playing'){
+        cred.style.display='none';
+        lbb.style.display='flex';
+        chb.style.display='none';
+        snd.style.display='flex';
+        if(WALLET) wb.style.display='flex';
+        else wb.style.display='none';
+    } else if(screen==='how'){
+        cred.style.display='none';
+        lbb.style.display='none';
+        chb.style.display='flex';
+        snd.style.display='none';
+        wb.style.display='none';
+    } else {
+        cred.style.display='none';
+        lbb.style.display='flex';
+        chb.style.display='flex';
+        snd.style.display='none';
+        wb.style.display='none';
+    }
+}
+
+function showHow(){ 
+    document.getElementById('ws').classList.add('hidden'); 
+    document.getElementById('hs').classList.remove('hidden'); 
+    setUI('how'); 
+}
 
 let STATE='idle',SCORE=0,LIVES=3,LEVEL=1,OVER=false,SPAWN_ACC=0,TX=0,AID=null,PT=null,ELAPSED=0;
 let ARC_CAUGHT=0,POWERUPS_COLLECTED=0;
@@ -303,7 +363,7 @@ function activatePU(type){ if(type==='shield'){ ACTIVE_PU.shield=true; document.
 function resetGame(){ SCORE=0; LIVES=3; LEVEL=1; ELAPSED=0; OVER=false; ARC_CAUGHT=0; POWERUPS_COLLECTED=0; ACTIVE_PU={}; ITEMS=[]; PARTS=[]; SPAWN_ACC=0; TX=canvas.width/2; B.x=canvas.width/2; document.getElementById('puhud').innerHTML=''; document.getElementById('sf').className=''; CHALLENGES.forEach(c=>{if(!c.done) c.progress=0;}); saveChallenges(); }
 function hud(){ document.getElementById('sc').innerHTML=`🌿 ${puActive('double')?'✨':''}${SCORE}`; document.getElementById('lv').textContent='❤️'.repeat(LIVES); const lvlNames=['Easy','Faster','Quick','Rapid','Blitz','Turbo','Sonic','Flash','Lightning','Insane','Nightmare','Godspeed']; document.getElementById('lb').textContent=lvlNames[Math.min(LEVEL-1,11)]; }
 function lvlBadge(){ const sf=document.getElementById('sf'); sf.classList.add('lvlup'); setTimeout(()=>sf.classList.remove('lvlup'),600); const spd=document.getElementById('spd'); document.getElementById('spdlvl').textContent=`Level ${LEVEL} 🔥`; spd.classList.add('show'); clearTimeout(spd._t); spd._t=setTimeout(()=>spd.classList.remove('show'),1600); sndLevelUp(); }
-function spawnOne(){ const arc=Math.random()<0.08; const pu=!arc&&Math.random()<0.08; const bomb=!arc&&!pu&&Math.random()<Math.min(0.50,0.05+(LEVEL-1)*0.04); let em='',puType=''; if(arc) em=''; else if(pu){ puType=POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)]; em=POWERUP_INFO[puType].em; } else if(bomb) em=BOMBS[Math.floor(Math.random()*BOMBS.length)]; else em=FRUITS[Math.floor(Math.random()*FRUITS.length)]; const spd=Math.max(120,200-(LEVEL-1)*8); const slowMult=puActive('slow')?0.4:1; const vy=(spd+Math.random()*50)*slowMult; const vx=(Math.random()<.5?1:-1)*(15+(LEVEL-1)*5+Math.random()*18)*slowMult; ITEMS.push({x:30+Math.random()*(canvas.width-60),y:-36,sz:arc?36:pu?38:32+Math.random()*9,em,bomb,arc,pu,puType,rot:0,sp:(Math.random()-.5)*3,vy,vx,done:false}); }
+function spawnOne(){ const arc=Math.random()<0.08; const pu=!arc&&Math.random()<0.08; const bomb=!arc&&!pu&&Math.random()<Math.min(0.50,0.05+(LEVEL-1)*0.04); let em='',puType=''; if(arc){ em=''; } else if(pu){ puType=POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)]; em=POWERUP_INFO[puType].em; } else if(bomb){ em=BOMBS[Math.floor(Math.random()*BOMBS.length)]; } else { em=FRUITS[Math.floor(Math.random()*FRUITS.length)]; } const spd=Math.max(120,200-(LEVEL-1)*8); const slowMult=puActive('slow')?0.4:1; const vy=(spd+Math.random()*50)*slowMult; const vx=(Math.random()<.5?1:-1)*(15+(LEVEL-1)*5+Math.random()*18)*slowMult; ITEMS.push({x:30+Math.random()*(canvas.width-60),y:-36,sz:arc?36:pu?38:32+Math.random()*9,em,bomb,arc,pu,puType,rot:0,sp:(Math.random()-.5)*3,vy,vx,done:false}); }
 function burst(x,y,good){ if(PARTS.length>=MAX_PARTS) return; const cols=good?['#c8f56a','#7ecb20','#ffe066']:['#ff4d4d','#ff6b6b']; const n=IS_MOBILE?7:12; for(let i=0;i<n;i++){ if(PARTS.length>=MAX_PARTS) break; const a=Math.random()*Math.PI*2,s=100+Math.random()*240; PARTS.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-140,lf:1,dc:2.5+Math.random()*2,sz:3+Math.random()*7,col:cols[Math.floor(Math.random()*cols.length)]}); } }
 function arcBurst(x,y){ if(PARTS.length>=MAX_PARTS) return; const n=IS_MOBILE?11:22; for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2,s=140+Math.random()*300; PARTS.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-180,lf:1,dc:1.6+Math.random()*1.3,sz:4+Math.random()*9,col:['#4a9eff','#a0d4ff','#fff','#c8f56a'][Math.floor(Math.random()*4)]}); } const el=document.getElementById('ap'); el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1300); }
 function puBurst(x,y){ if(PARTS.length>=MAX_PARTS) return; const n=IS_MOBILE?9:18; for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2,s=120+Math.random()*260; PARTS.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-160,lf:1,dc:2+Math.random()*1.5,sz:4+Math.random()*8,col:['#bf7fff','#e0b0ff','#fff','#d070ff'][Math.floor(Math.random()*4)]}); } }
@@ -319,7 +379,18 @@ function drawBasket(){ ctx.save(); ctx.shadowBlur=0; const grad=ctx.createLinear
 let lastTs=0;
 function loop(ts){ if(!lastTs) lastTs=ts; let dt=Math.min(0.033,(ts-lastTs)/1000); lastTs=ts; ctx.clearRect(0,0,canvas.width,canvas.height); drawBG(); if(STATE==='playing'){ ELAPSED+=dt; tickPU(dt); updateChallenge('time',dt); const newLevel=Math.min(12,1+Math.floor(ELAPSED/15)); if(newLevel!==LEVEL){ LEVEL=newLevel; lvlBadge(); } B.x+=(TX-B.x)*(1-Math.exp(-11*dt)); B.x=Math.max(B.w/2,Math.min(canvas.width-B.w/2,B.x)); const slowMult=puActive('slow')?0.4:1; const spawnMs=Math.max(350,1600-(LEVEL-1)*100); SPAWN_ACC+=dt*1000*slowMult; if(SPAWN_ACC>=spawnMs){ SPAWN_ACC-=spawnMs; spawnOne(); if(LEVEL>=5) spawnOne(); if(LEVEL>=9) spawnOne(); } for(let i=ITEMS.length-1;i>=0;i--){ const it=ITEMS[i]; if(it.done){ ITEMS.splice(i,1); continue; } it.x+=it.vx*dt*(puActive('slow')?0.4:1); it.y+=it.vy*dt*(puActive('slow')?0.4:1); it.rot+=it.sp*dt; if(it.x<it.sz/2){ it.x=it.sz/2; it.vx=-it.vx; } if(it.x>canvas.width-it.sz/2){ it.x=canvas.width-it.sz/2; it.vx=-it.vx; } const inX=it.x>B.x-B.w/2-it.sz/4&&it.x<B.x+B.w/2+it.sz/4; const inY=it.y+it.sz/2>B.y-B.h/2&&it.y-it.sz/2<B.y+B.h/2; if(inX&&inY){ it.done=true; if(it.arc){ const pts=puActive('double')?40:20; SCORE+=pts; ARC_CAUGHT++; arcBurst(it.x,it.y); sndARC(); updateChallenge('arc'); } else if(it.pu){ activatePU(it.puType); puBurst(it.x,it.y); POWERUPS_COLLECTED++; updateChallenge('powerup'); } else if(it.bomb){ if(ACTIVE_PU.shield){ delete ACTIVE_PU.shield; document.getElementById('sf').classList.remove('shield'); updatePUHud(); burst(it.x,it.y,true); sndCatch(); } else { LIVES--; burst(it.x,it.y,false); sndBomb(); document.getElementById('sf').classList.add('warn'); setTimeout(()=>document.getElementById('sf').classList.remove('warn'),500); } } else { SCORE+=puActive('double')?2:1; burst(it.x,it.y,true); sndCatch(); } hud(); if(LIVES<=0&&!OVER){ OVER=true; gameOver(); } continue; } if(it.y>canvas.height+30){ if(!it.bomb&&!it.arc&&!it.pu){ LIVES--; burst(it.x,canvas.height-10,false); sndMiss(); document.getElementById('sf').classList.add('warn'); setTimeout(()=>document.getElementById('sf').classList.remove('warn'),500); hud(); if(LIVES<=0&&!OVER){ OVER=true; gameOver(); } } ITEMS.splice(i,1); } } } drawItems(); drawParts(dt); drawBasket(); AID=requestAnimationFrame(loop); }
 function gameOver(){ STATE='dead'; setUI('dead'); sndGameOver(); updateChallenge('score',SCORE); saveChallenges(); document.getElementById('fs').textContent=SCORE+' pts'; document.getElementById('gm').textContent='The jungle is messy! 🌴'; const done=CHALLENGES.filter(c=>c.done).length; const chsum=document.getElementById('chsum'); if(done>0){ chsum.style.display='block'; chsum.innerHTML=`🎯 ${done} Daily Challenge${done>1?'s':''} completed!`; } else chsum.style.display='none'; const sm=document.getElementById('sm'); sm.style.display='block'; if(WALLET){ sm.textContent='⏳ Saving score...'; lbAdd(WALLET,SCORE).then(()=>{ sm.style.background='#c8f56a18'; sm.textContent='✅ Score saved! Tap 🏆 to see rankings.'; }).catch(()=>{ sm.style.background='#ff4d4d18'; sm.textContent='❌ Could not save score.'; }); } else { sm.style.background='#ffffff08'; sm.textContent='🔒 Connect wallet to appear on leaderboard!'; } document.getElementById('gos').classList.remove('hidden'); }
-function startGame(){ ['ws','hs','gos'].forEach(id=>document.getElementById(id).classList.add('hidden')); if(AID) cancelAnimationFrame(AID); resetGame(); STATE='playing'; PT=null; setUI('playing'); hud(); initLeaves(); AID=requestAnimationFrame(loop); getAC(); }
+function startGame(){ 
+    ['ws','hs','gos'].forEach(id=>document.getElementById(id).classList.add('hidden')); 
+    if(AID) cancelAnimationFrame(AID); 
+    resetGame(); 
+    STATE='playing'; 
+    PT=null; 
+    setUI('playing'); 
+    hud(); 
+    initLeaves(); 
+    AID=requestAnimationFrame(loop); 
+    getAC(); 
+}
 async function renderLB(){ const list=document.getElementById('ll'); list.innerHTML='<div class="lem">🏆 loading...</div>'; const ranked=await lbFetch(); document.getElementById('stP').textContent=ranked.length; document.getElementById('stT').textContent=ranked.length?ranked[0].s:0; const avg=ranked.length?Math.round(ranked.reduce((s,r)=>s+r.s,0)/ranked.length):0; document.getElementById('stA').textContent=avg; if(WALLET){ const idx=ranked.findIndex(r=>r.a===WALLET.toLowerCase()); if(idx>=0){ document.getElementById('mc').style.display='flex'; document.getElementById('myR').textContent='#'+(idx+1); document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); document.getElementById('myP').textContent=ranked[idx].s+' pts'; } else document.getElementById('mc').style.display='none'; } else document.getElementById('mc').style.display='none'; list.innerHTML='<div class="lhd"><span class="c1">#</span><span class="c2">Wallet</span><span class="c3">Score</span></div>'; if(!ranked.length){ list.innerHTML+='<div class="lem">No scores yet! Be first 🍌</div>'; return; } ranked.slice(0,25).forEach((e,i)=>{ const me=WALLET&&e.a===WALLET.toLowerCase(); const row=document.createElement('div'); row.className=`lrow ${me?'you':''}`; row.innerHTML=`<div class="lrk">${i+1}</div><div class="lad">${me?'⭐ You ('+e.a.slice(0,6)+'...)':e.a.slice(0,8)+'...'}</div><div class="lsc">${e.s}</div>`; list.appendChild(row); }); }
 function openDash(){ document.getElementById('do').style.display='flex'; renderLB(); }
 function closeDash(){ document.getElementById('do').style.display='none'; }
