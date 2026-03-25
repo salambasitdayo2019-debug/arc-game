@@ -120,6 +120,8 @@
         .chreset { font-size: .68rem; color: #6a9a6a; text-align: center; margin-top: 12px; }
         #sndBtn { position: absolute; bottom: 44px; right: 12px; z-index: 20; background: #0d2b0dcc; border: 1px solid #c8f56a22; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; touch-action: auto; backdrop-filter: blur(4px); }
         #sndBtn:active { transform: scale(.9); }
+        .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #c8f56a33; border-top-color: #c8f56a; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -173,7 +175,7 @@
     <!-- game over -->
     <div class="scr hidden" id="gos">
         <div class="ebig">🍂</div><h1>Game Over!</h1>
-        <div id="fs">0 pts</div>
+        <div id="fs" style="font-size: clamp(1.8rem, 8vw, 2.5rem); color: #c8f56a; font-weight: bold; margin: 8px 0;">0 pts</div>
         <p id="gm"></p>
         <div id="chsum"></div>
         <div id="sm"></div>
@@ -211,8 +213,64 @@ const firebaseConfig={ apiKey:"AIzaSyDWzftE7ytniz3Zl5EuhAwtcMVRausPrW8", authDom
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 let WALLET=null;
-async function lbAdd(addr,score){ if(!addr) return; await db.collection('scores').add({ address:addr.toLowerCase(), score, time:Date.now() }); }
-async function lbFetch(){ const snap=await db.collection('scores').orderBy('score','desc').limit(200).get(); const best={}; snap.forEach(d=>{ const data=d.data(); if(!best[data.address]||data.score>best[data.address]) best[data.address]=data.score; }); return Object.entries(best).map(([a,s])=>({a,s})).sort((x,y)=>y.s-x.s); }
+let currentScore = 0;
+
+// Improved score saving with better error handling
+async function lbAdd(addr, score) { 
+    if(!addr || !score || score === 0) return false; 
+    try {
+        await db.collection('scores').add({ 
+            address: addr.toLowerCase(), 
+            score: score, 
+            time: Date.now(),
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }); 
+        console.log('Score saved:', score, 'for wallet:', addr);
+        return true;
+    } catch(e) {
+        console.error('Error saving score:', e);
+        return false;
+    }
+}
+
+// Improved leaderboard fetch with caching
+let cachedLeaderboard = null;
+let lastFetch = 0;
+const CACHE_DURATION = 30000; // 30 seconds cache
+
+async function lbFetch() {
+    // Return cached data if still fresh
+    if (cachedLeaderboard && (Date.now() - lastFetch) < CACHE_DURATION) {
+        return cachedLeaderboard;
+    }
+    
+    try {
+        const snap = await db.collection('scores')
+            .orderBy('score', 'desc')
+            .limit(200)
+            .get();
+        
+        const best = {};
+        snap.forEach(d => { 
+            const data = d.data(); 
+            if(data.address && data.score) {
+                if(!best[data.address] || data.score > best[data.address]) {
+                    best[data.address] = data.score;
+                }
+            }
+        });
+        
+        cachedLeaderboard = Object.entries(best)
+            .map(([a,s]) => ({a: a.toLowerCase(), s: s}))
+            .sort((x,y) => y.s - x.s);
+        lastFetch = Date.now();
+        
+        return cachedLeaderboard;
+    } catch(e) {
+        console.error('Error fetching leaderboard:', e);
+        return cachedLeaderboard || [];
+    }
+}
 
 // ─── WALLET CONNECTION ────────────────────────────────────────────────────────
 const ARC_ID='0x138D';
@@ -225,9 +283,11 @@ function setWallet(addr){
     WALLET=addr;
     document.getElementById('wa').textContent=addr.slice(0,6)+'...'+addr.slice(-4);
     document.getElementById('wb').style.display='flex';
+    console.log('Wallet set:', addr);
 }
 
 async function tryArcChain(){
+    if(!window.ethereum) return;
     try {
         await ethereum.request({ method:'wallet_switchEthereumChain', params:[{chainId:ARC_ID}] });
     } catch(e){
@@ -255,19 +315,13 @@ async function connectWallet() {
         const accounts=await ethereum.request({ method:'eth_requestAccounts' });
         if(!accounts||accounts.length===0) throw new Error('No accounts returned.');
 
-        // Set wallet
         setWallet(accounts[0]);
-        
-        // Try to add Arc chain (do in background)
         tryArcChain().catch(console.warn);
         
         hideNW();
-        
-        // IMPORTANT: Show success message then transition to how-to screen
         showNW('✅ Wallet connected! Click Start Playing!', true);
         setTimeout(() => {
             hideNW();
-            // Transition to how-to screen
             document.getElementById('ws').classList.add('hidden');
             document.getElementById('hs').classList.remove('hidden');
             setUI('how');
@@ -289,7 +343,14 @@ async function connectWallet() {
 
 if(window.ethereum){
     ethereum.request({ method:'eth_accounts' }).then(accs=>{ if(accs&&accs.length>0) setWallet(accs[0]); }).catch(()=>{});
-    ethereum.on('accountsChanged',(accs)=>{ if(accs.length>0){ setWallet(accs[0]); } else { WALLET=null; document.getElementById('wb').style.display='none'; } });
+    ethereum.on('accountsChanged',(accs)=>{ 
+        if(accs.length>0){ 
+            setWallet(accs[0]); 
+        } else { 
+            WALLET=null; 
+            document.getElementById('wb').style.display='none'; 
+        }
+    });
 }
 
 // CHALLENGES
@@ -360,7 +421,7 @@ function puActive(type){ return !!ACTIVE_PU[type]; }
 function tickPU(dt){ for(let t in ACTIVE_PU){ if(t==='shield') continue; ACTIVE_PU[t]-=dt; if(ACTIVE_PU[t]<=0) delete ACTIVE_PU[t]; } updatePUHud(); }
 function updatePUHud(){ const hud=document.getElementById('puhud'); hud.innerHTML=''; Object.entries(ACTIVE_PU).forEach(([type,val])=>{ if(type!=='shield'){ const maxDur=POWERUP_INFO[type].dur; const percent=(val/maxDur)*100; const chip=document.createElement('div'); chip.className='puchip'; chip.innerHTML=`${POWERUP_INFO[type].em} <div class="pubar"><div class="pufill" style="width:${percent}%"></div></div>`; hud.appendChild(chip); } }); }
 function activatePU(type){ if(type==='shield'){ ACTIVE_PU.shield=true; document.getElementById('sf').classList.add('shield'); } else { ACTIVE_PU[type]=POWERUP_INFO[type].dur; } updatePUHud(); sndPowerUp(type); const pp=document.getElementById('pupp'); const labels={shield:'🛡 Shield! Blocks 1 hit!',slow:'⏳ Slow Time! (7s)',double:'✨ Double Points! (10s)'}; document.getElementById('putxt').textContent=labels[type]; document.getElementById('puval').textContent=type==='shield'?'Protected!':`${POWERUP_INFO[type].dur}s boost!`; pp.classList.add('show'); clearTimeout(pp._t); pp._t=setTimeout(()=>pp.classList.remove('show'),1800); }
-function resetGame(){ SCORE=0; LIVES=3; LEVEL=1; ELAPSED=0; OVER=false; ARC_CAUGHT=0; POWERUPS_COLLECTED=0; ACTIVE_PU={}; ITEMS=[]; PARTS=[]; SPAWN_ACC=0; TX=canvas.width/2; B.x=canvas.width/2; document.getElementById('puhud').innerHTML=''; document.getElementById('sf').className=''; CHALLENGES.forEach(c=>{if(!c.done) c.progress=0;}); saveChallenges(); }
+function resetGame(){ SCORE=0; LIVES=3; LEVEL=1; ELAPSED=0; OVER=false; ARC_CAUGHT=0; POWERUPS_COLLECTED=0; ACTIVE_PU={}; ITEMS=[]; PARTS=[]; SPAWN_ACC=0; TX=canvas.width/2; B.x=canvas.width/2; document.getElementById('puhud').innerHTML=''; document.getElementById('sf').className=''; }
 function hud(){ document.getElementById('sc').innerHTML=`🌿 ${puActive('double')?'✨':''}${SCORE}`; document.getElementById('lv').textContent='❤️'.repeat(LIVES); const lvlNames=['Easy','Faster','Quick','Rapid','Blitz','Turbo','Sonic','Flash','Lightning','Insane','Nightmare','Godspeed']; document.getElementById('lb').textContent=lvlNames[Math.min(LEVEL-1,11)]; }
 function lvlBadge(){ const sf=document.getElementById('sf'); sf.classList.add('lvlup'); setTimeout(()=>sf.classList.remove('lvlup'),600); const spd=document.getElementById('spd'); document.getElementById('spdlvl').textContent=`Level ${LEVEL} 🔥`; spd.classList.add('show'); clearTimeout(spd._t); spd._t=setTimeout(()=>spd.classList.remove('show'),1600); sndLevelUp(); }
 function spawnOne(){ const arc=Math.random()<0.08; const pu=!arc&&Math.random()<0.08; const bomb=!arc&&!pu&&Math.random()<Math.min(0.50,0.05+(LEVEL-1)*0.04); let em='',puType=''; if(arc){ em=''; } else if(pu){ puType=POWERUP_TYPES[Math.floor(Math.random()*POWERUP_TYPES.length)]; em=POWERUP_INFO[puType].em; } else if(bomb){ em=BOMBS[Math.floor(Math.random()*BOMBS.length)]; } else { em=FRUITS[Math.floor(Math.random()*FRUITS.length)]; } const spd=Math.max(120,200-(LEVEL-1)*8); const slowMult=puActive('slow')?0.4:1; const vy=(spd+Math.random()*50)*slowMult; const vx=(Math.random()<.5?1:-1)*(15+(LEVEL-1)*5+Math.random()*18)*slowMult; ITEMS.push({x:30+Math.random()*(canvas.width-60),y:-36,sz:arc?36:pu?38:32+Math.random()*9,em,bomb,arc,pu,puType,rot:0,sp:(Math.random()-.5)*3,vy,vx,done:false}); }
@@ -378,7 +439,54 @@ function drawParts(dt){ for(let i=0;i<PARTS.length;i++){ const p=PARTS[i]; p.x+=
 function drawBasket(){ ctx.save(); ctx.shadowBlur=0; const grad=ctx.createLinearGradient(B.x-B.w/2,B.y-B.h/2,B.x+B.w/2,B.y+B.h/2); grad.addColorStop(0,'#c8860a'); grad.addColorStop(1,'#8b5e00'); ctx.fillStyle=grad; ctx.beginPath(); ctx.moveTo(B.x-B.w/2,B.y-B.h/2); ctx.lineTo(B.x+B.w/2,B.y-B.h/2); ctx.lineTo(B.x+B.w/2-8,B.y+B.h/2); ctx.lineTo(B.x-B.w/2+8,B.y+B.h/2); ctx.fill(); ctx.fillStyle='#e09a1a'; ctx.beginPath(); ctx.rect(B.x-B.w/2-4,B.y-B.h/2-6,B.w+8,14); ctx.fill(); ctx.restore(); if(ACTIVE_PU.shield){ ctx.beginPath(); ctx.arc(B.x,B.y,B.w*0.85,0,Math.PI*2); ctx.fillStyle='rgba(191,127,255,0.35)'; ctx.fill(); } }
 let lastTs=0;
 function loop(ts){ if(!lastTs) lastTs=ts; let dt=Math.min(0.033,(ts-lastTs)/1000); lastTs=ts; ctx.clearRect(0,0,canvas.width,canvas.height); drawBG(); if(STATE==='playing'){ ELAPSED+=dt; tickPU(dt); updateChallenge('time',dt); const newLevel=Math.min(12,1+Math.floor(ELAPSED/15)); if(newLevel!==LEVEL){ LEVEL=newLevel; lvlBadge(); } B.x+=(TX-B.x)*(1-Math.exp(-11*dt)); B.x=Math.max(B.w/2,Math.min(canvas.width-B.w/2,B.x)); const slowMult=puActive('slow')?0.4:1; const spawnMs=Math.max(350,1600-(LEVEL-1)*100); SPAWN_ACC+=dt*1000*slowMult; if(SPAWN_ACC>=spawnMs){ SPAWN_ACC-=spawnMs; spawnOne(); if(LEVEL>=5) spawnOne(); if(LEVEL>=9) spawnOne(); } for(let i=ITEMS.length-1;i>=0;i--){ const it=ITEMS[i]; if(it.done){ ITEMS.splice(i,1); continue; } it.x+=it.vx*dt*(puActive('slow')?0.4:1); it.y+=it.vy*dt*(puActive('slow')?0.4:1); it.rot+=it.sp*dt; if(it.x<it.sz/2){ it.x=it.sz/2; it.vx=-it.vx; } if(it.x>canvas.width-it.sz/2){ it.x=canvas.width-it.sz/2; it.vx=-it.vx; } const inX=it.x>B.x-B.w/2-it.sz/4&&it.x<B.x+B.w/2+it.sz/4; const inY=it.y+it.sz/2>B.y-B.h/2&&it.y-it.sz/2<B.y+B.h/2; if(inX&&inY){ it.done=true; if(it.arc){ const pts=puActive('double')?40:20; SCORE+=pts; ARC_CAUGHT++; arcBurst(it.x,it.y); sndARC(); updateChallenge('arc'); } else if(it.pu){ activatePU(it.puType); puBurst(it.x,it.y); POWERUPS_COLLECTED++; updateChallenge('powerup'); } else if(it.bomb){ if(ACTIVE_PU.shield){ delete ACTIVE_PU.shield; document.getElementById('sf').classList.remove('shield'); updatePUHud(); burst(it.x,it.y,true); sndCatch(); } else { LIVES--; burst(it.x,it.y,false); sndBomb(); document.getElementById('sf').classList.add('warn'); setTimeout(()=>document.getElementById('sf').classList.remove('warn'),500); } } else { SCORE+=puActive('double')?2:1; burst(it.x,it.y,true); sndCatch(); } hud(); if(LIVES<=0&&!OVER){ OVER=true; gameOver(); } continue; } if(it.y>canvas.height+30){ if(!it.bomb&&!it.arc&&!it.pu){ LIVES--; burst(it.x,canvas.height-10,false); sndMiss(); document.getElementById('sf').classList.add('warn'); setTimeout(()=>document.getElementById('sf').classList.remove('warn'),500); hud(); if(LIVES<=0&&!OVER){ OVER=true; gameOver(); } } ITEMS.splice(i,1); } } } drawItems(); drawParts(dt); drawBasket(); AID=requestAnimationFrame(loop); }
-function gameOver(){ STATE='dead'; setUI('dead'); sndGameOver(); updateChallenge('score',SCORE); saveChallenges(); document.getElementById('fs').textContent=SCORE+' pts'; document.getElementById('gm').textContent='The jungle is messy! 🌴'; const done=CHALLENGES.filter(c=>c.done).length; const chsum=document.getElementById('chsum'); if(done>0){ chsum.style.display='block'; chsum.innerHTML=`🎯 ${done} Daily Challenge${done>1?'s':''} completed!`; } else chsum.style.display='none'; const sm=document.getElementById('sm'); sm.style.display='block'; if(WALLET){ sm.textContent='⏳ Saving score...'; lbAdd(WALLET,SCORE).then(()=>{ sm.style.background='#c8f56a18'; sm.textContent='✅ Score saved! Tap 🏆 to see rankings.'; }).catch(()=>{ sm.style.background='#ff4d4d18'; sm.textContent='❌ Could not save score.'; }); } else { sm.style.background='#ffffff08'; sm.textContent='🔒 Connect wallet to appear on leaderboard!'; } document.getElementById('gos').classList.remove('hidden'); }
+function gameOver(){ 
+    STATE='dead'; 
+    setUI('dead'); 
+    sndGameOver(); 
+    updateChallenge('score',SCORE); 
+    saveChallenges(); 
+    
+    document.getElementById('fs').textContent=SCORE+' pts'; 
+    document.getElementById('gm').textContent='The jungle is messy! 🌴'; 
+    
+    const done=CHALLENGES.filter(c=>c.done).length; 
+    const chsum=document.getElementById('chsum'); 
+    if(done>0){ 
+        chsum.style.display='block'; 
+        chsum.innerHTML=`🎯 ${done} Daily Challenge${done>1?'s':''} completed!`; 
+    } else { 
+        chsum.style.display='none'; 
+    } 
+    
+    const sm=document.getElementById('sm'); 
+    sm.style.display='block'; 
+    
+    if(WALLET && SCORE > 0){ 
+        sm.innerHTML = '<div class="loading-spinner"></div> Saving score...';
+        lbAdd(WALLET, SCORE).then((saved) => { 
+            if(saved) {
+                sm.innerHTML = '✅ Score saved! Tap 🏆 to see rankings.';
+                sm.style.background='#c8f56a18';
+                // Clear cache to force refresh on next leaderboard view
+                cachedLeaderboard = null;
+            } else {
+                sm.innerHTML = '⚠️ Score could not be saved. Try again?';
+                sm.style.background='#ff4d4d18';
+            }
+        }).catch(()=>{ 
+            sm.innerHTML = '❌ Could not save score. Check connection.';
+            sm.style.background='#ff4d4d18';
+        }); 
+    } else if(WALLET && SCORE === 0) {
+        sm.innerHTML = '🔒 Score was 0, not saved to leaderboard.';
+        sm.style.background='#ffffff18';
+    } else { 
+        sm.innerHTML = '🔒 Connect wallet to appear on leaderboard!';
+        sm.style.background='#ffffff08';
+    } 
+    document.getElementById('gos').classList.remove('hidden'); 
+}
+
 function startGame(){ 
     ['ws','hs','gos'].forEach(id=>document.getElementById(id).classList.add('hidden')); 
     if(AID) cancelAnimationFrame(AID); 
@@ -391,10 +499,70 @@ function startGame(){
     AID=requestAnimationFrame(loop); 
     getAC(); 
 }
-async function renderLB(){ const list=document.getElementById('ll'); list.innerHTML='<div class="lem">🏆 loading...</div>'; const ranked=await lbFetch(); document.getElementById('stP').textContent=ranked.length; document.getElementById('stT').textContent=ranked.length?ranked[0].s:0; const avg=ranked.length?Math.round(ranked.reduce((s,r)=>s+r.s,0)/ranked.length):0; document.getElementById('stA').textContent=avg; if(WALLET){ const idx=ranked.findIndex(r=>r.a===WALLET.toLowerCase()); if(idx>=0){ document.getElementById('mc').style.display='flex'; document.getElementById('myR').textContent='#'+(idx+1); document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); document.getElementById('myP').textContent=ranked[idx].s+' pts'; } else document.getElementById('mc').style.display='none'; } else document.getElementById('mc').style.display='none'; list.innerHTML='<div class="lhd"><span class="c1">#</span><span class="c2">Wallet</span><span class="c3">Score</span></div>'; if(!ranked.length){ list.innerHTML+='<div class="lem">No scores yet! Be first 🍌</div>'; return; } ranked.slice(0,25).forEach((e,i)=>{ const me=WALLET&&e.a===WALLET.toLowerCase(); const row=document.createElement('div'); row.className=`lrow ${me?'you':''}`; row.innerHTML=`<div class="lrk">${i+1}</div><div class="lad">${me?'⭐ You ('+e.a.slice(0,6)+'...)':e.a.slice(0,8)+'...'}</div><div class="lsc">${e.s}</div>`; list.appendChild(row); }); }
-function openDash(){ document.getElementById('do').style.display='flex'; renderLB(); }
+
+async function renderLB(){ 
+    const list=document.getElementById('ll'); 
+    list.innerHTML='<div class="lem"><div class="loading-spinner"></div> Loading scores...</div>'; 
+    
+    try {
+        const ranked=await lbFetch(); 
+        
+        document.getElementById('stP').textContent=ranked.length; 
+        document.getElementById('stT').textContent=ranked.length?ranked[0].s:0; 
+        const avg=ranked.length?Math.round(ranked.reduce((s,r)=>s+r.s,0)/ranked.length):0; 
+        document.getElementById('stA').textContent=avg; 
+        
+        // Show user's rank if wallet connected
+        if(WALLET){ 
+            const idx=ranked.findIndex(r=>r.a===WALLET.toLowerCase()); 
+            if(idx>=0){ 
+                document.getElementById('mc').style.display='flex'; 
+                document.getElementById('myR').textContent='#'+(idx+1); 
+                document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
+                document.getElementById('myP').textContent=ranked[idx].s+' pts'; 
+            } else { 
+                document.getElementById('mc').style.display='none';
+                // Check if user has any scores
+                const userScores = await db.collection('scores').where('address', '==', WALLET.toLowerCase()).get();
+                if(userScores.empty) {
+                    const mcDiv = document.getElementById('mc');
+                    mcDiv.style.display='flex';
+                    document.getElementById('myR').textContent='#—'; 
+                    document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
+                    document.getElementById('myP').textContent='No scores yet';
+                }
+            } 
+        } else { 
+            document.getElementById('mc').style.display='none'; 
+        } 
+        
+        // Build leaderboard list
+        list.innerHTML='<div class="lhd"><span class="c1">#</span><span class="c2">Wallet</span><span class="c3">Score</span></div>'; 
+        if(!ranked.length){ 
+            list.innerHTML+='<div class="lem">No scores yet! Be first 🍌</div>'; 
+            return; 
+        } 
+        
+        ranked.slice(0,25).forEach((e,i)=>{ 
+            const me=WALLET && e.a===WALLET.toLowerCase(); 
+            const row=document.createElement('div'); 
+            row.className=`lrow ${me?'you':''}`; 
+            row.innerHTML=`<div class="lrk">${i+1}</div><div class="lad">${me?'⭐ You':e.a.slice(0,8)+'...'}</div><div class="lsc">${e.s}</div>`; 
+            list.appendChild(row); 
+        });
+    } catch(e) {
+        console.error('Error rendering leaderboard:', e);
+        list.innerHTML='<div class="lem">⚠️ Error loading scores. Try again.</div>';
+    }
+}
+
+function openDash(){ 
+    document.getElementById('do').style.display='flex'; 
+    renderLB(); 
+}
 function closeDash(){ document.getElementById('do').style.display='none'; }
 
+// Event Listeners
 document.getElementById('conBtn').addEventListener('click', connectWallet);
 document.getElementById('skipBtn').addEventListener('click',()=>{ document.getElementById('ws').classList.add('hidden'); showHow(); });
 document.getElementById('howBtn').addEventListener('click',showHow);
@@ -402,10 +570,22 @@ document.getElementById('hsBtn').addEventListener('click',startGame);
 document.getElementById('rsBtn').addEventListener('click',startGame);
 document.getElementById('haBtn').addEventListener('click',showHow);
 document.getElementById('backBtn').addEventListener('click',()=>{ document.getElementById('hs').classList.add('hidden'); document.getElementById('ws').classList.remove('hidden'); setUI('home'); });
+
+// Controls
 canvas.addEventListener('mousemove',e=>{ if(STATE!=='playing') return; const rect=canvas.getBoundingClientRect(); TX=(e.clientX-rect.left)*(canvas.width/rect.width); });
 canvas.addEventListener('touchstart',e=>{ e.preventDefault(); if(STATE!=='playing') return; const rect=canvas.getBoundingClientRect(); TX=(e.touches[0].clientX-rect.left)*(canvas.width/rect.width); },{passive:false});
 canvas.addEventListener('touchmove',e=>{ e.preventDefault(); if(STATE!=='playing') return; const rect=canvas.getBoundingClientRect(); TX=(e.touches[0].clientX-rect.left)*(canvas.width/rect.width); },{passive:false});
-loadChallenges(); showChBadge(); setUI('home'); resetGame(); initLeaves(); resize(); AID=requestAnimationFrame(loop);
+
+// Initialize
+loadChallenges(); 
+showChBadge(); 
+setUI('home'); 
+resetGame(); 
+initLeaves(); 
+resize(); 
+AID=requestAnimationFrame(loop);
+
+// Close modals when clicking outside
 document.getElementById('do').addEventListener('click',e=>{ if(e.target.id==='do') closeDash(); });
 document.getElementById('chdo').addEventListener('click',e=>{ if(e.target.id==='chdo') closeChallenge(); });
 </script>
