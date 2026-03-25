@@ -122,7 +122,8 @@
         #sndBtn:active { transform: scale(.9); }
         .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #c8f56a33; border-top-color: #c8f56a; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .debug-info { font-size: 10px; color: #888; margin-top: 5px; font-family: monospace; word-break: break-all; }
+        .success { color: #c8f56a; }
+        .error { color: #ffaaaa; }
     </style>
 </head>
 <body>
@@ -192,6 +193,32 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
+// ============================================
+// YOUR FIREBASE CONFIGURATION
+// ============================================
+const firebaseConfig = {
+    apiKey: "AIzaSyDWzftE7ytn3zL5EuHwAtcMVRausPrW8",
+    authDomain: "jungle-catch.firebaseapp.com",
+    projectId: "jungle-catch",
+    storageBucket: "jungle-catch.firebasestorage.app",
+    messagingSenderId: "165229648783",
+    appId: "1:165229648783:web:aaaf2f1951955e8f9eb7a"
+};
+
+// Initialize Firebase
+let db = null;
+let firebaseAvailable = false;
+
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseAvailable = true;
+    console.log('✅ Firebase connected successfully! Project: jungle-catch');
+} catch(e) {
+    console.error('❌ Firebase connection error:', e);
+    firebaseAvailable = false;
+}
+
 const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const MAX_PARTS = IS_MOBILE ? 55 : 130;
 const LEAF_COUNT = IS_MOBILE ? 7 : 14;
@@ -209,128 +236,72 @@ function sndLevelUp(){ [262,330,392,523,784].forEach((f,i)=>playTone(f,'square',
 function sndGameOver(){ [330,294,262,220,165].forEach((f,i)=>playTone(f,'sawtooth',0.18,0.22,i*0.11)); }
 function toggleSound(){ SOUND_ON=!SOUND_ON; document.getElementById('sndBtn').textContent=SOUND_ON?'🔊':'🔇'; if(SOUND_ON) sndCatch(); }
 
-// FIREBASE with better error handling
-const firebaseConfig={ 
-    apiKey:"AIzaSyDWzftE7ytniz3Zl5EuhAwtcMVRausPrW8", 
-    authDomain:"junglecatch-db.firebaseapp.com", 
-    projectId:"junglecatch-db", 
-    storageBucket:"junglecatch-db.appspot.com", 
-    messagingSenderId:"1052239648783", 
-    appId:"1:1052239648783:web:aaa6f2f1951955e8f9eb7a" 
-};
-
-let db = null;
-let firebaseInitialized = false;
-
-try {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    firebaseInitialized = true;
-    console.log('Firebase initialized successfully');
-} catch(e) {
-    console.error('Firebase initialization error:', e);
-    firebaseInitialized = false;
-}
-
 let WALLET = null;
 let currentScore = 0;
 
-// Local storage fallback for scores
-function saveScoreLocal(addr, score) {
-    try {
-        const localScores = JSON.parse(localStorage.getItem('junglecatch_scores') || '{}');
-        if (!localScores[addr] || score > localScores[addr]) {
-            localScores[addr] = score;
-            localStorage.setItem('junglecatch_scores', JSON.stringify(localScores));
-        }
-        return true;
-    } catch(e) {
-        console.error('Local save error:', e);
-        return false;
-    }
-}
-
-function getLocalScores() {
-    try {
-        return JSON.parse(localStorage.getItem('junglecatch_scores') || '{}');
-    } catch(e) {
-        return {};
-    }
-}
-
-// Improved score saving with local fallback
-async function lbAdd(addr, score) { 
+// Save score to Firebase - using 'scores' collection (matches your existing data)
+async function saveScoreToFirebase(addr, score) { 
     if(!addr || !score || score === 0) {
-        console.log('Score not saved: invalid data');
+        console.log('❌ Score not saved: invalid data');
         return false; 
     }
     
-    // Always save locally first
-    saveScoreLocal(addr, score);
-    
-    if (!firebaseInitialized || !db) {
-        console.log('Firebase not available, saved locally only');
+    if (!firebaseAvailable || !db) {
+        console.log('⚠️ Firebase not available');
         return false;
     }
     
     try {
-        await db.collection('scores').add({ 
+        // Save to 'scores' collection (matches your existing database)
+        const docRef = await db.collection('scores').add({ 
             address: addr.toLowerCase(), 
             score: score, 
-            time: Date.now(),
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            date: new Date().toISOString()
         }); 
-        console.log('Score saved to Firebase:', score, 'for wallet:', addr);
+        console.log('✅ Score saved to Firebase! ID:', docRef.id, 'Score:', score, 'Wallet:', addr);
         return true;
     } catch(e) {
-        console.error('Firebase save error:', e);
-        console.log('Score saved locally only due to Firebase error');
+        console.error('❌ Firebase save error:', e);
+        console.error('Error details:', e.message);
         return false;
     }
 }
 
-// Improved leaderboard fetch with local fallback
-async function lbFetch() {
-    // If Firebase is available, try to fetch from there
-    if (firebaseInitialized && db) {
-        try {
-            const snap = await db.collection('scores')
-                .orderBy('score', 'desc')
-                .limit(200)
-                .get();
-            
-            const best = {};
-            snap.forEach(d => { 
-                const data = d.data(); 
-                if(data.address && data.score) {
-                    if(!best[data.address] || data.score > best[data.address]) {
-                        best[data.address] = data.score;
-                    }
-                }
-            });
-            
-            const firebaseScores = Object.entries(best)
-                .map(([a,s]) => ({a: a.toLowerCase(), s: s}))
-                .sort((x,y) => y.s - x.s);
-            
-            return firebaseScores;
-        } catch(e) {
-            console.error('Firebase fetch error:', e);
-            // Fall back to local scores
-            return getLocalLeaderboard();
-        }
+// Get leaderboard from Firebase
+async function getLeaderboard() {
+    if (!firebaseAvailable || !db) {
+        console.log('⚠️ Firebase not available');
+        return [];
     }
     
-    // Fall back to local scores
-    return getLocalLeaderboard();
-}
-
-function getLocalLeaderboard() {
-    const localScores = getLocalScores();
-    const leaderboard = Object.entries(localScores)
-        .map(([a,s]) => ({a: a.toLowerCase(), s: s}))
-        .sort((x,y) => y.s - x.s);
-    return leaderboard;
+    try {
+        const snapshot = await db.collection('scores')
+            .orderBy('score', 'desc')
+            .limit(100)
+            .get();
+        
+        // Get unique best scores per wallet
+        const bestScores = {};
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.address && data.score) {
+                if (!bestScores[data.address] || data.score > bestScores[data.address]) {
+                    bestScores[data.address] = data.score;
+                }
+            }
+        });
+        
+        const leaderboard = Object.entries(bestScores)
+            .map(([address, score]) => ({ address: address.toLowerCase(), score: score }))
+            .sort((a, b) => b.score - a.score);
+        
+        console.log('✅ Leaderboard loaded:', leaderboard.length, 'players');
+        return leaderboard;
+    } catch(e) {
+        console.error('❌ Error loading leaderboard:', e);
+        return [];
+    }
 }
 
 // ─── WALLET CONNECTION ────────────────────────────────────────────────────────
@@ -344,7 +315,7 @@ function setWallet(addr){
     WALLET=addr;
     document.getElementById('wa').textContent=addr.slice(0,6)+'...'+addr.slice(-4);
     document.getElementById('wb').style.display='flex';
-    console.log('Wallet set:', addr);
+    console.log('✅ Wallet set:', addr);
 }
 
 async function tryArcChain(){
@@ -399,8 +370,6 @@ async function connectWallet() {
         setTimeout(hideNW,5000);
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 if(window.ethereum){
     ethereum.request({ method:'eth_accounts' }).then(accs=>{ if(accs&&accs.length>0) setWallet(accs[0]); }).catch(()=>{});
@@ -500,7 +469,8 @@ function drawParts(dt){ for(let i=0;i<PARTS.length;i++){ const p=PARTS[i]; p.x+=
 function drawBasket(){ ctx.save(); ctx.shadowBlur=0; const grad=ctx.createLinearGradient(B.x-B.w/2,B.y-B.h/2,B.x+B.w/2,B.y+B.h/2); grad.addColorStop(0,'#c8860a'); grad.addColorStop(1,'#8b5e00'); ctx.fillStyle=grad; ctx.beginPath(); ctx.moveTo(B.x-B.w/2,B.y-B.h/2); ctx.lineTo(B.x+B.w/2,B.y-B.h/2); ctx.lineTo(B.x+B.w/2-8,B.y+B.h/2); ctx.lineTo(B.x-B.w/2+8,B.y+B.h/2); ctx.fill(); ctx.fillStyle='#e09a1a'; ctx.beginPath(); ctx.rect(B.x-B.w/2-4,B.y-B.h/2-6,B.w+8,14); ctx.fill(); ctx.restore(); if(ACTIVE_PU.shield){ ctx.beginPath(); ctx.arc(B.x,B.y,B.w*0.85,0,Math.PI*2); ctx.fillStyle='rgba(191,127,255,0.35)'; ctx.fill(); } }
 let lastTs=0;
 function loop(ts){ if(!lastTs) lastTs=ts; let dt=Math.min(0.033,(ts-lastTs)/1000); lastTs=ts; ctx.clearRect(0,0,canvas.width,canvas.height); drawBG(); if(STATE==='playing'){ ELAPSED+=dt; tickPU(dt); updateChallenge('time',dt); const newLevel=Math.min(12,1+Math.floor(ELAPSED/15)); if(newLevel!==LEVEL){ LEVEL=newLevel; lvlBadge(); } B.x+=(TX-B.x)*(1-Math.exp(-11*dt)); B.x=Math.max(B.w/2,Math.min(canvas.width-B.w/2,B.x)); const slowMult=puActive('slow')?0.4:1; const spawnMs=Math.max(350,1600-(LEVEL-1)*100); SPAWN_ACC+=dt*1000*slowMult; if(SPAWN_ACC>=spawnMs){ SPAWN_ACC-=spawnMs; spawnOne(); if(LEVEL>=5) spawnOne(); if(LEVEL>=9) spawnOne(); } for(let i=ITEMS.length-1;i>=0;i--){ const it=ITEMS[i]; if(it.done){ ITEMS.splice(i,1); continue; } it.x+=it.vx*dt*(puActive('slow')?0.4:1); it.y+=it.vy*dt*(puActive('slow')?0.4:1); it.rot+=it.sp*dt; if(it.x<it.sz/2){ it.x=it.sz/2; it.vx=-it.vx; } if(it.x>canvas.width-it.sz/2){ it.x=canvas.width-it.sz/2; it.vx=-it.vx; } const inX=it.x>B.x-B.w/2-it.sz/4&&it.x<B.x+B.w/2+it.sz/4; const inY=it.y+it.sz/2>B.y-B.h/2&&it.y-it.sz/2<B.y+B.h/2; if(inX&&inY){ it.done=true; if(it.arc){ const pts=puActive('double')?40:20; SCORE+=pts; ARC_CAUGHT++; arcBurst(it.x,it.y); sndARC(); updateChallenge('arc'); } else if(it.pu){ activatePU(it.puType); puBurst(it.x,it.y); POWERUPS_COLLECTED++; updateChallenge('powerup'); } else if(it.bomb){ if(ACTIVE_PU.shield){ delete ACTIVE_PU.shield; document.getElementById('sf').classList.remove('shield'); updatePUHud(); burst(it.x,it.y,true); sndCatch(); } else { LIVES--; burst(it.x,it.y,false); sndBomb(); document.getElementById('sf').classList.add('warn'); setTimeout(()=>document.getElementById('sf').classList.remove('warn'),500); } } else { SCORE+=puActive('double')?2:1; burst(it.x,it.y,true); sndCatch(); } hud(); if(LIVES<=0&&!OVER){ OVER=true; gameOver(); } continue; } if(it.y>canvas.height+30){ if(!it.bomb&&!it.arc&&!it.pu){ LIVES--; burst(it.x,canvas.height-10,false); sndMiss(); document.getElementById('sf').classList.add('warn'); setTimeout(()=>document.getElementById('sf').classList.remove('warn'),500); hud(); if(LIVES<=0&&!OVER){ OVER=true; gameOver(); } } ITEMS.splice(i,1); } } } drawItems(); drawParts(dt); drawBasket(); AID=requestAnimationFrame(loop); }
-function gameOver(){ 
+
+async function gameOver(){ 
     STATE='dead'; 
     setUI('dead'); 
     sndGameOver(); 
@@ -523,24 +493,20 @@ function gameOver(){
     sm.style.display='block'; 
     
     if(WALLET && SCORE > 0){ 
-        sm.innerHTML = '<div class="loading-spinner"></div> Saving score...';
-        lbAdd(WALLET, SCORE).then((saved) => { 
-            if(saved) {
-                sm.innerHTML = '✅ Score saved to cloud! Tap 🏆 to see rankings.';
-                sm.style.background='#c8f56a18';
-            } else {
-                sm.innerHTML = '✅ Score saved locally! (Cloud save failed)';
-                sm.style.background='#f5a62318';
-            }
-        }).catch(()=>{ 
-            sm.innerHTML = '✅ Score saved locally! (Network issue)';
-            sm.style.background='#f5a62318';
-        }); 
+        sm.innerHTML = '<div class="loading-spinner"></div> Saving score to leaderboard...';
+        const saved = await saveScoreToFirebase(WALLET, SCORE);
+        if(saved) {
+            sm.innerHTML = '✅ Score saved to global leaderboard! Tap 🏆 to see rankings.';
+            sm.style.background='#c8f56a18';
+        } else {
+            sm.innerHTML = '⚠️ Could not save to leaderboard. Check console for errors.';
+            sm.style.background='#ff4d4d18';
+        }
     } else if(WALLET && SCORE === 0) {
         sm.innerHTML = '🔒 Score was 0, not saved to leaderboard.';
         sm.style.background='#ffffff18';
     } else { 
-        sm.innerHTML = '🔒 Connect wallet to save scores!';
+        sm.innerHTML = '🔒 Connect wallet to save scores to global leaderboard!';
         sm.style.background='#ffffff08';
     } 
     document.getElementById('gos').classList.remove('hidden'); 
@@ -561,60 +527,45 @@ function startGame(){
 
 async function renderLB(){ 
     const list=document.getElementById('ll'); 
-    list.innerHTML='<div class="lem"><div class="loading-spinner"></div> Loading scores...</div>'; 
+    list.innerHTML='<div class="lem"><div class="loading-spinner"></div> Loading global leaderboard...</div>'; 
     
-    try {
-        const ranked = await lbFetch(); 
-        
-        document.getElementById('stP').textContent=ranked.length; 
-        document.getElementById('stT').textContent=ranked.length?ranked[0].s:0; 
-        const avg=ranked.length?Math.round(ranked.reduce((s,r)=>s+r.s,0)/ranked.length):0; 
-        document.getElementById('stA').textContent=avg; 
-        
-        if(WALLET){ 
-            const idx=ranked.findIndex(r=>r.a===WALLET.toLowerCase()); 
-            if(idx>=0){ 
-                document.getElementById('mc').style.display='flex'; 
-                document.getElementById('myR').textContent='#'+(idx+1); 
-                document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
-                document.getElementById('myP').textContent=ranked[idx].s+' pts'; 
-            } else { 
-                document.getElementById('mc').style.display='flex'; 
-                document.getElementById('myR').textContent='#—'; 
-                document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
-                document.getElementById('myP').textContent='Play to get on board!';
-            }
+    const leaderboard = await getLeaderboard();
+    
+    document.getElementById('stP').textContent=leaderboard.length; 
+    document.getElementById('stT').textContent=leaderboard.length?leaderboard[0].score:0; 
+    const avg=leaderboard.length?Math.round(leaderboard.reduce((s,r)=>s+r.score,0)/leaderboard.length):0; 
+    document.getElementById('stA').textContent=avg; 
+    
+    if(WALLET){ 
+        const idx=leaderboard.findIndex(r=>r.address===WALLET.toLowerCase()); 
+        if(idx>=0){ 
+            document.getElementById('mc').style.display='flex'; 
+            document.getElementById('myR').textContent='#'+(idx+1); 
+            document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
+            document.getElementById('myP').textContent=leaderboard[idx].score+' pts'; 
         } else { 
-            document.getElementById('mc').style.display='none'; 
-        } 
-        
-        list.innerHTML='<div class="lhd"><span class="c1">#</span><span class="c2">Wallet</span><span class="c3">Score</span></div>'; 
-        if(!ranked.length){ 
-            list.innerHTML+='<div class="lem">No scores yet! Be first 🍌</div>'; 
-            return; 
-        } 
-        
-        ranked.slice(0,25).forEach((e,i)=>{ 
-            const me=WALLET && e.a===WALLET.toLowerCase(); 
-            const row=document.createElement('div'); 
-            row.className=`lrow ${me?'you':''}`; 
-            row.innerHTML=`<div class="lrk">${i+1}</div><div class="lad">${me?'⭐ You':e.a.slice(0,8)+'...'}</div><div class="lsc">${e.s}</div>`; 
-            list.appendChild(row); 
-        });
-        
-        // Add note if using local only
-        if (!firebaseInitialized || ranked.length === 0) {
-            const note = document.createElement('div');
-            note.className = 'lem';
-            note.style.fontSize = '10px';
-            note.style.padding = '10px';
-            note.innerHTML = '📌 Using local storage - scores saved on this device only';
-            list.appendChild(note);
+            document.getElementById('mc').style.display='flex'; 
+            document.getElementById('myR').textContent='#—'; 
+            document.getElementById('myA').textContent=WALLET.slice(0,6)+'...'+WALLET.slice(-4); 
+            document.getElementById('myP').textContent='Play to get on board!';
         }
-    } catch(e) {
-        console.error('Error rendering leaderboard:', e);
-        list.innerHTML='<div class="lem">⚠️ Error loading scores. Try again.</div>';
-    }
+    } else { 
+        document.getElementById('mc').style.display='none'; 
+    } 
+    
+    list.innerHTML='<div class="lhd"><span class="c1">#</span><span class="c2">Wallet</span><span class="c3">Score</span></div>'; 
+    if(!leaderboard.length){ 
+        list.innerHTML+='<div class="lem">No scores yet! Be first 🍌</div>'; 
+        return; 
+    } 
+    
+    leaderboard.slice(0,25).forEach((entry,idx)=>{ 
+        const me=WALLET && entry.address===WALLET.toLowerCase(); 
+        const row=document.createElement('div'); 
+        row.className=`lrow ${me?'you':''}`; 
+        row.innerHTML=`<div class="lrk">${idx+1}</div><div class="lad">${me?'⭐ You':entry.address.slice(0,8)+'...'}</div><div class="lsc">${entry.score}</div>`; 
+        list.appendChild(row); 
+    });
 }
 
 function openDash(){ 
@@ -649,6 +600,13 @@ AID=requestAnimationFrame(loop);
 // Close modals when clicking outside
 document.getElementById('do').addEventListener('click',e=>{ if(e.target.id==='do') closeDash(); });
 document.getElementById('chdo').addEventListener('click',e=>{ if(e.target.id==='chdo') closeChallenge(); });
+
+// Display Firebase status
+if(firebaseAvailable) {
+    console.log('🎮 Jungle Catch is connected to Firebase! Project: jungle-catch');
+} else {
+    console.warn('⚠️ Firebase not available. Check your config.');
+}
 </script>
 </body>
 </html>
